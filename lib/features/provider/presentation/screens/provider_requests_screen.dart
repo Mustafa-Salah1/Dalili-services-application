@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../request/presentation/providers/request_provider.dart';
 import '../../../request/presentation/providers/request_state.dart';
 
+import '../../../request/presentation/providers/provider_availability_provider.dart';
+import '../../../request/presentation/widgets/provider_availability_card.dart';
+
 const _primary = Color(0xFF0F766E);
 const _bg = Color(0xFFF8FAFC);
 const _surface = Colors.white;
@@ -17,6 +20,10 @@ const _pendingColor = Color(0xFFD97706);
 const _pendingBg = Color(0xFFFEF3C7);
 const _rejectedColor = Color(0xFFDC2626);
 const _rejectedBg = Color(0xFFFEE2E2);
+const _inProgressColor = Color(0xFF2563EB);
+const _inProgressBg = Color(0xFFDBEAFE);
+const _completedColor = Color(0xFF0F766E);
+const _completedBg = Color(0xFFCCFBF1);
 
 class ProviderRequestsScreen extends ConsumerStatefulWidget {
   final int providerId;
@@ -29,14 +36,18 @@ class ProviderRequestsScreen extends ConsumerStatefulWidget {
 
 class _ProviderRequestsScreenState
     extends ConsumerState<ProviderRequestsScreen> {
-  // Track per-card loading state
   final Set<int> _processingIds = {};
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      ref.read(requestProvider.notifier).getProviderRequests(widget.providerId);
+    Future.microtask(() async {
+      await ref
+          .read(requestProvider.notifier)
+          .getProviderAvailability(widget.providerId);
+      await ref
+          .read(requestProvider.notifier)
+          .getProviderRequests(widget.providerId);
     });
   }
 
@@ -48,6 +59,10 @@ class _ProviderRequestsScreenState
         return _rejectedColor;
       case 'PENDING':
         return _pendingColor;
+      case 'IN_PROGRESS':
+        return _inProgressColor;
+      case 'COMPLETED':
+        return _completedColor;
       default:
         return _textSecondary;
     }
@@ -61,6 +76,10 @@ class _ProviderRequestsScreenState
         return _rejectedBg;
       case 'PENDING':
         return _pendingBg;
+      case 'IN_PROGRESS':
+        return _inProgressBg;
+      case 'COMPLETED':
+        return _completedBg;
       default:
         return const Color(0xFFF1F5F9);
     }
@@ -74,6 +93,10 @@ class _ProviderRequestsScreenState
         return Icons.cancel_rounded;
       case 'PENDING':
         return Icons.access_time_rounded;
+      case 'IN_PROGRESS':
+        return Icons.construction_rounded;
+      case 'COMPLETED':
+        return Icons.verified_rounded;
       default:
         return Icons.help_rounded;
     }
@@ -88,7 +111,6 @@ class _ProviderRequestsScreenState
       icon: Icons.check_circle_rounded,
     );
     if (!confirmed || !mounted) return;
-
     setState(() => _processingIds.add(requestId));
     await ref
         .read(requestProvider.notifier)
@@ -105,11 +127,44 @@ class _ProviderRequestsScreenState
       icon: Icons.cancel_rounded,
     );
     if (!confirmed || !mounted) return;
-
     setState(() => _processingIds.add(requestId));
     await ref
         .read(requestProvider.notifier)
         .rejectRequest(requestId, widget.providerId);
+    if (mounted) setState(() => _processingIds.remove(requestId));
+  }
+
+  Future<void> _handleStart(int requestId) async {
+    final confirmed = await _showConfirmDialog(
+      title: 'Start Job',
+      message: 'Are you sure you want to start this job?',
+      confirmLabel: 'Start',
+      confirmColor: _inProgressColor,
+      icon: Icons.construction_rounded,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _processingIds.add(requestId));
+    await ref
+        .read(requestProvider.notifier)
+        .startRequest(requestId, widget.providerId);
+    ref.invalidate(providerAvailabilityProvider(widget.providerId));
+    if (mounted) setState(() => _processingIds.remove(requestId));
+  }
+
+  Future<void> _handleComplete(int requestId) async {
+    final confirmed = await _showConfirmDialog(
+      title: 'Complete Job',
+      message: 'Are you sure you want to mark this job as completed?',
+      confirmLabel: 'Complete',
+      confirmColor: _completedColor,
+      icon: Icons.verified_rounded,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _processingIds.add(requestId));
+    await ref
+        .read(requestProvider.notifier)
+        .completeRequest(requestId, widget.providerId);
+    ref.invalidate(providerAvailabilityProvider(widget.providerId));
     if (mounted) setState(() => _processingIds.remove(requestId));
   }
 
@@ -164,10 +219,19 @@ class _ProviderRequestsScreenState
             final rejected = requests
                 .where((r) => r.status == 'REJECTED')
                 .length;
+            final inProgress = requests
+                .where((r) => r.status == 'IN_PROGRESS')
+                .length;
+            final completed = requests
+                .where((r) => r.status == 'COMPLETED')
+                .length;
+
+            final availabilityAsync = ref.watch(
+              providerAvailabilityProvider(widget.providerId),
+            );
 
             return CustomScrollView(
               slivers: [
-                // Statistics row
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -176,11 +240,25 @@ class _ProviderRequestsScreenState
                       pending: pending,
                       accepted: accepted,
                       rejected: rejected,
+                      inProgress: inProgress,
+                      completed: completed,
                     ),
                   ),
                 ),
 
-                // Request cards
+                SliverToBoxAdapter(
+                  child: availabilityAsync.when(
+                    data: (availability) {
+                      return ProviderAvailabilityCard(
+                        busy: availability.busy,
+                        customerName: availability.customerName,
+                        remainingMinutes: availability.remainingMinutes,
+                      );
+                    },
+                    loading: () => const SizedBox(),
+                    error: (_, __) => const SizedBox(),
+                  ),
+                ),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                   sliver: SliverList(
@@ -195,6 +273,8 @@ class _ProviderRequestsScreenState
                           statusIcon: _statusIcon(requests[i].status),
                           onAccept: () => _handleAccept(requests[i].id),
                           onReject: () => _handleReject(requests[i].id),
+                          onStart: () => _handleStart(requests[i].id),
+                          onComplete: () => _handleComplete(requests[i].id),
                         ),
                       ),
                       childCount: requests.length,
@@ -255,44 +335,74 @@ class _ProviderRequestsScreenState
 }
 
 class _StatsRow extends StatelessWidget {
-  final int total, pending, accepted, rejected;
+  final int total, pending, accepted, rejected, inProgress, completed;
   const _StatsRow({
     required this.total,
     required this.pending,
     required this.accepted,
     required this.rejected,
+    required this.inProgress,
+    required this.completed,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: _StatChip(label: 'Total', value: total, color: _primary),
+        Row(
+          children: [
+            Expanded(
+              child: _StatChip(label: 'Total', value: total, color: _primary),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _StatChip(
+                label: 'Pending',
+                value: pending,
+                color: _pendingColor,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _StatChip(
+                label: 'Accepted',
+                value: accepted,
+                color: _acceptedColor,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _StatChip(
+                label: 'Rejected',
+                value: rejected,
+                color: _rejectedColor,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatChip(
-            label: 'Pending',
-            value: pending,
-            color: _pendingColor,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatChip(
-            label: 'Accepted',
-            value: accepted,
-            color: _acceptedColor,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatChip(
-            label: 'Rejected',
-            value: rejected,
-            color: _rejectedColor,
-          ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _StatChip(
+                label: 'In Progress',
+                value: inProgress,
+                color: _inProgressColor,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _StatChip(
+                label: 'Completed',
+                value: completed,
+                color: _completedColor,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Expanded(child: SizedBox()),
+            const SizedBox(width: 8),
+            const Expanded(child: SizedBox()),
+          ],
         ),
       ],
     );
@@ -404,6 +514,8 @@ class _RequestCard extends StatelessWidget {
   final IconData statusIcon;
   final VoidCallback onAccept;
   final VoidCallback onReject;
+  final VoidCallback? onStart;
+  final VoidCallback? onComplete;
 
   const _RequestCard({
     required this.request,
@@ -413,6 +525,8 @@ class _RequestCard extends StatelessWidget {
     required this.statusIcon,
     required this.onAccept,
     required this.onReject,
+    this.onStart,
+    this.onComplete,
   });
 
   String get _initials {
@@ -424,36 +538,48 @@ class _RequestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPending = request.status == 'PENDING';
+    final status = request.status as String;
+    final isPending = status == 'PENDING';
+    final isAccepted = status == 'ACCEPTED';
+    final isInProgress = status == 'IN_PROGRESS';
+    final isCompleted = status == 'COMPLETED';
+
+    final accentColor = isPending
+        ? _pendingColor
+        : isInProgress
+        ? _inProgressColor
+        : null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
-        border: isPending
-            ? Border.all(color: _pendingColor.withOpacity(0.3), width: 1.5)
+        border: accentColor != null
+            ? Border.all(color: accentColor.withOpacity(0.3), width: 1.5)
             : Border.all(color: _divider, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isPending ? 0.07 : 0.04),
-            blurRadius: isPending ? 16 : 10,
+            color: Colors.black.withOpacity(
+              (isPending || isInProgress) ? 0.07 : 0.04,
+            ),
+            blurRadius: (isPending || isInProgress) ? 16 : 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         children: [
-          // Top accent strip for pending
-          if (isPending)
+          if (accentColor != null)
             Container(
               height: 4,
-              decoration: const BoxDecoration(
-                color: _pendingColor,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              decoration: BoxDecoration(
+                color: accentColor,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
               ),
             ),
-
           Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
@@ -488,7 +614,6 @@ class _RequestCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    // Status badge
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -504,7 +629,7 @@ class _RequestCard extends StatelessWidget {
                           Icon(statusIcon, size: 13, color: statusColor),
                           const SizedBox(width: 5),
                           Text(
-                            request.status,
+                            status.replaceAll('_', ' '),
                             style: TextStyle(
                               color: statusColor,
                               fontWeight: FontWeight.w600,
@@ -522,16 +647,12 @@ class _RequestCard extends StatelessWidget {
                 Container(height: 1, color: _divider),
                 const SizedBox(height: 14),
 
-                // Date row
                 _InfoRow(
                   icon: Icons.calendar_today_rounded,
                   label: 'Date',
                   value: request.requestDate,
                 ),
-
                 const SizedBox(height: 10),
-
-                // Notes row
                 _InfoRow(
                   icon: Icons.notes_rounded,
                   label: 'Notes',
@@ -539,7 +660,7 @@ class _RequestCard extends StatelessWidget {
                   multiline: true,
                 ),
 
-                // Action buttons (pending only)
+                // PENDING actions
                 if (isPending) ...[
                   const SizedBox(height: 16),
                   Container(height: 1, color: _divider),
@@ -578,6 +699,101 @@ class _RequestCard extends StatelessWidget {
                             ),
                           ],
                         ),
+                ],
+
+                // ACCEPTED → Start Job
+                if (isAccepted) ...[
+                  const SizedBox(height: 16),
+                  Container(height: 1, color: _divider),
+                  const SizedBox(height: 14),
+                  isProcessing
+                      ? const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: _inProgressColor,
+                              strokeWidth: 2.5,
+                            ),
+                          ),
+                        )
+                      : _ActionButton(
+                          label: 'Start Job',
+                          icon: Icons.construction_rounded,
+                          color: _inProgressColor,
+                          bg: _inProgressBg,
+                          onTap: onStart ?? () {},
+                          fullWidth: true,
+                        ),
+                ],
+
+                // IN_PROGRESS → Complete Job
+                if (isInProgress) ...[
+                  const SizedBox(height: 16),
+                  Container(height: 1, color: _divider),
+                  const SizedBox(height: 14),
+                  isProcessing
+                      ? const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: _completedColor,
+                              strokeWidth: 2.5,
+                            ),
+                          ),
+                        )
+                      : _ActionButton(
+                          label: 'Complete Job',
+                          icon: Icons.verified_rounded,
+                          color: _completedColor,
+                          bg: _completedBg,
+                          onTap: onComplete ?? () {},
+                          fullWidth: true,
+                        ),
+                ],
+
+                // COMPLETED badge
+                if (isCompleted) ...[
+                  const SizedBox(height: 16),
+                  Container(height: 1, color: _divider),
+                  const SizedBox(height: 14),
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _completedBg,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _completedColor.withOpacity(0.3),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.verified_rounded,
+                            color: _completedColor,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Job Completed',
+                            style: TextStyle(
+                              color: _completedColor,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -685,17 +901,20 @@ class _ActionButton extends StatelessWidget {
   final Color color;
   final Color bg;
   final VoidCallback onTap;
+  final bool fullWidth;
+
   const _ActionButton({
     required this.label,
     required this.icon,
     required this.color,
     required this.bg,
     required this.onTap,
+    this.fullWidth = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    final button = GestureDetector(
       onTap: onTap,
       child: Container(
         height: 44,
@@ -721,6 +940,8 @@ class _ActionButton extends StatelessWidget {
         ),
       ),
     );
+
+    return fullWidth ? SizedBox(width: double.infinity, child: button) : button;
   }
 }
 
@@ -928,7 +1149,6 @@ class _SkeletonViewState extends State<_SkeletonView>
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           child: Column(
             children: [
-              // Stats row skeleton
               Row(
                 children: List.generate(
                   4,
@@ -945,7 +1165,6 @@ class _SkeletonViewState extends State<_SkeletonView>
                 ),
               ),
               const SizedBox(height: 16),
-              // Card skeletons
               for (int i = 0; i < 3; i++) skeletonCard(),
             ],
           ),
@@ -971,7 +1190,7 @@ class _ErrorView extends StatelessWidget {
             Container(
               width: 72,
               height: 72,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: _rejectedBg,
                 shape: BoxShape.circle,
               ),
@@ -1048,8 +1267,8 @@ class _EmptyView extends StatelessWidget {
             Container(
               width: 80,
               height: 80,
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFFCFA),
+              decoration: const BoxDecoration(
+                color: Color(0xFFEFFCFA),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.inbox_rounded, color: _primary, size: 36),

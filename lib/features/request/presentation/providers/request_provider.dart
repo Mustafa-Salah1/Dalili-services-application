@@ -18,6 +18,8 @@ class RequestNotifier extends StateNotifier<RequestState> {
   Future<void> createRequest({
     required int providerId,
     required String requestDate,
+    required String requestTime,
+    required int estimatedDurationMinutes,
     required String notes,
   }) async {
     state = RequestLoading();
@@ -26,6 +28,8 @@ class RequestNotifier extends StateNotifier<RequestState> {
       final request = await repository.createRequest(
         providerId: providerId,
         requestDate: requestDate,
+        requestTime: requestTime,
+        estimatedDurationMinutes: estimatedDurationMinutes,
         notes: notes,
       );
 
@@ -72,6 +76,38 @@ class RequestNotifier extends StateNotifier<RequestState> {
   Future<void> rejectRequest(int requestId, int providerId) async {
     try {
       await repository.rejectRequest(requestId);
+
+      await getProviderRequests(providerId);
+    } catch (e) {
+      state = RequestError(e.toString());
+    }
+  }
+
+  Future<void> getProviderAvailability(int providerId) async {
+    state = RequestLoading();
+
+    try {
+      final availability = await repository.getProviderAvailability(providerId);
+
+      state = ProviderAvailabilityLoaded(availability);
+    } catch (e) {
+      state = RequestError(e.toString());
+    }
+  }
+
+  Future<void> startRequest(int requestId, int providerId) async {
+    try {
+      await repository.startRequest(requestId);
+
+      await getProviderRequests(providerId);
+    } catch (e) {
+      state = RequestError(e.toString());
+    }
+  }
+
+  Future<void> completeRequest(int requestId, int providerId) async {
+    try {
+      await repository.completeRequest(requestId);
 
       await getProviderRequests(providerId);
     } catch (e) {

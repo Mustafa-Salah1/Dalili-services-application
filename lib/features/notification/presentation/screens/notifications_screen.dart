@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/notification_provider.dart';
+import '../providers/notification_state.dart';
 
 const _primary = Color(0xFF0F766E);
 const _secondary = Color(0xFF14B8A6);
@@ -61,36 +64,32 @@ const _notifMeta = {
   ),
 };
 
-class _Notif {
-  final String id;
-  final String title;
-  final String body;
-  final NotifType type;
-  final DateTime time;
-  bool isRead;
-
-  _Notif({
-    required this.id,
-    required this.title,
-    required this.body,
-    required this.type,
-    required this.time,
-    this.isRead = false,
-  });
+NotifType _resolveType(String? type) {
+  switch (type?.toLowerCase()) {
+    case 'review':
+      return NotifType.review;
+    case 'favorite':
+      return NotifType.favorite;
+    case 'system':
+      return NotifType.system;
+    case 'app_status':
+    case 'appstatus':
+      return NotifType.appStatus;
+    default:
+      return NotifType.provider;
+  }
 }
 
-class NotificationsScreen extends StatefulWidget {
+class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
 
   @override
-  State<NotificationsScreen> createState() => _NotificationsScreenState();
+  ConsumerState<NotificationsScreen> createState() =>
+      _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen>
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
     with TickerProviderStateMixin {
-  bool _loading = true;
-  List<_Notif> _notifs = [];
-
   late AnimationController _headerCtrl;
   late Animation<double> _headerFade;
 
@@ -104,15 +103,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
     _headerFade = CurvedAnimation(parent: _headerCtrl, curve: Curves.easeOut);
 
-    // Simulate loading — replace with real API call
-    Future.delayed(const Duration(milliseconds: 1400), () {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _notifs = _demoNotifs();
-      });
-      _headerCtrl.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(notificationProvider.notifier).getNotifications();
     });
+
+    _headerCtrl.forward();
   }
 
   @override
@@ -121,124 +116,16 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     super.dispose();
   }
 
-  // Replace with real data source / API
-  List<_Notif> _demoNotifs() {
-    final now = DateTime.now();
-    return [
-      _Notif(
-        id: '1',
-        title: 'Application Approved',
-        body: 'Your service provider application has been approved.',
-        type: NotifType.appStatus,
-        time: now.subtract(const Duration(minutes: 12)),
-        isRead: false,
-      ),
-      _Notif(
-        id: '2',
-        title: 'New Review',
-        body: 'Ahmed left you a 5-star review for plumbing service.',
-        type: NotifType.review,
-        time: now.subtract(const Duration(hours: 2)),
-        isRead: false,
-      ),
-      _Notif(
-        id: '3',
-        title: 'Provider Profile Updated',
-        body: 'Your profile information was updated successfully.',
-        type: NotifType.provider,
-        time: now.subtract(const Duration(hours: 5)),
-        isRead: true,
-      ),
-      _Notif(
-        id: '4',
-        title: 'Saved to Favorites',
-        body: 'A client added you to their favorites list.',
-        type: NotifType.favorite,
-        time: now.subtract(const Duration(days: 1, hours: 1)),
-        isRead: true,
-      ),
-      _Notif(
-        id: '5',
-        title: 'System Maintenance',
-        body:
-            'Scheduled maintenance on Sunday 2:00–4:00 AM. Brief downtime expected.',
-        type: NotifType.system,
-        time: now.subtract(const Duration(days: 1, hours: 6)),
-        isRead: true,
-      ),
-      _Notif(
-        id: '6',
-        title: 'Another Review',
-        body: 'Sara rated your electrical service 4 stars.',
-        type: NotifType.review,
-        time: now.subtract(const Duration(days: 3)),
-        isRead: true,
-      ),
-      _Notif(
-        id: '7',
-        title: 'Profile View Milestone',
-        body: 'Your profile was viewed 100 times this week!',
-        type: NotifType.provider,
-        time: now.subtract(const Duration(days: 5)),
-        isRead: true,
-      ),
-    ];
-  }
-
-  int get _unreadCount => _notifs.where((n) => !n.isRead).length;
-
-  void _markAllRead() {
-    setState(() {
-      for (final n in _notifs) {
-        n.isRead = true;
-      }
-    });
-  }
-
-  void _markRead(String id) {
-    setState(() {
-      final i = _notifs.indexWhere((n) => n.id == id);
-      if (i != -1) _notifs[i].isRead = true;
-    });
-  }
-
-  void _delete(String id) {
-    setState(() {
-      _notifs.removeWhere((n) => n.id == id);
-    });
-  }
-
-  // Group notifications by date bucket
-  Map<String, List<_Notif>> _grouped() {
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day);
-    final yesterdayStart = todayStart.subtract(const Duration(days: 1));
-
-    final today = <_Notif>[];
-    final yesterday = <_Notif>[];
-    final earlier = <_Notif>[];
-
-    for (final n in _notifs) {
-      if (n.time.isAfter(todayStart)) {
-        today.add(n);
-      } else if (n.time.isAfter(yesterdayStart)) {
-        yesterday.add(n);
-      } else {
-        earlier.add(n);
-      }
-    }
-
-    return {
-      if (today.isNotEmpty) 'Today': today,
-      if (yesterday.isNotEmpty) 'Yesterday': yesterday,
-      if (earlier.isNotEmpty) 'Earlier': earlier,
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
-    final groups = _grouped();
-    final hasNotifs = _notifs.isNotEmpty;
+    final state = ref.watch(notificationProvider);
+
+    int unreadCount = 0;
+    bool hasUnread = false;
+    if (state is NotificationLoaded) {
+      unreadCount = state.notifications.where((n) => !n.isRead).length;
+      hasUnread = unreadCount > 0;
+    }
 
     return Scaffold(
       backgroundColor: _bg,
@@ -246,33 +133,126 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         child: Column(
           children: [
             FadeTransition(
-              opacity: _loading ? const AlwaysStoppedAnimation(1) : _headerFade,
+              opacity: _headerFade,
               child: _Header(
-                unreadCount: _unreadCount,
-                onMarkAllRead: _unreadCount > 0 ? _markAllRead : null,
+                unreadCount: unreadCount,
+                onMarkAllRead: hasUnread
+                    ? () {
+                        if (state is NotificationLoaded) {
+                          for (final n in state.notifications) {
+                            if (!n.isRead) {
+                              ref
+                                  .read(notificationProvider.notifier)
+                                  .markAsRead(n.id);
+                            }
+                          }
+                        }
+                      }
+                    : null,
               ),
             ),
-
             Expanded(
-              child: _loading
-                  ? const _SkeletonLoader()
-                  : !hasNotifs
-                  ? const _EmptyState()
-                  : ListView(
+              child: Builder(
+                builder: (context) {
+                  if (state is NotificationLoading) {
+                    return const _SkeletonLoader();
+                  }
+
+                  if (state is NotificationError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Text(
+                          state.message,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: _textMuted,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (state is NotificationLoaded) {
+                    final notifications = state.notifications;
+
+                    if (notifications.isEmpty) {
+                      return const _EmptyState();
+                    }
+
+                    final now = DateTime.now();
+                    final todayStart = DateTime(now.year, now.month, now.day);
+                    final yesterdayStart = todayStart.subtract(
+                      const Duration(days: 1),
+                    );
+
+                    final today = notifications
+                        .where((n) => n.createdAt.isAfter(todayStart))
+                        .toList();
+                    final yesterday = notifications
+                        .where(
+                          (n) =>
+                              n.createdAt.isAfter(yesterdayStart) &&
+                              !n.createdAt.isAfter(todayStart),
+                        )
+                        .toList();
+                    final earlier = notifications
+                        .where((n) => !n.createdAt.isAfter(yesterdayStart))
+                        .toList();
+
+                    final groups = <MapEntry<String, List<dynamic>>>[];
+                    if (today.isNotEmpty) {
+                      groups.add(MapEntry('Today', today));
+                    }
+                    if (yesterday.isNotEmpty) {
+                      groups.add(MapEntry('Yesterday', yesterday));
+                    }
+                    if (earlier.isNotEmpty) {
+                      groups.add(MapEntry('Earlier', earlier));
+                    }
+
+                    final items = <Object>[];
+                    for (final g in groups) {
+                      items.add(g.key);
+                      items.addAll(List<Object>.from(g.value));
+                    }
+
+                    return ListView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                      children: [
-                        for (final entry in groups.entries) ...[
-                          _GroupLabel(label: entry.key),
-                          for (final notif in entry.value)
-                            _AnimatedNotifCard(
-                              key: ValueKey(notif.id),
-                              notif: notif,
-                              onMarkRead: () => _markRead(notif.id),
-                              onDelete: () => _delete(notif.id),
-                            ),
-                        ],
-                      ],
-                    ),
+                      itemCount: items.length,
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+
+                        if (item is String) {
+                          return _GroupLabel(label: item);
+                        }
+
+                        final notification = item;
+                        final notifType = NotifType.system;
+                        final meta = _notifMeta[notifType]!;
+
+                        return _AnimatedNotifCard(
+                          key: ValueKey((notification as dynamic).id),
+                          id: (notification as dynamic).id,
+                          title: (notification as dynamic).title,
+                          body: (notification as dynamic).message,
+                          isRead: (notification as dynamic).isRead,
+                          createdAt: (notification as dynamic).createdAt,
+                          meta: meta,
+                          onMarkRead: () {
+                            ref
+                                .read(notificationProvider.notifier)
+                                .markAsRead((notification as dynamic).id);
+                          },
+                        );
+                      },
+                    );
+                  }
+
+                  return const SizedBox();
+                },
+              ),
             ),
           ],
         ),
@@ -304,7 +284,6 @@ class _Header extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Back
           GestureDetector(
             onTap: () => Navigator.maybePop(context),
             child: Container(
@@ -322,8 +301,6 @@ class _Header extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 14),
-
-          // Title block
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,8 +322,6 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-
-          // Unread badge
           if (unreadCount > 0)
             Container(
               margin: const EdgeInsets.only(right: 8),
@@ -382,8 +357,6 @@ class _Header extends StatelessWidget {
                 ],
               ),
             ),
-
-          // Mark all read button
           if (onMarkAllRead != null)
             TextButton(
               onPressed: onMarkAllRead,
@@ -435,15 +408,23 @@ class _GroupLabel extends StatelessWidget {
 }
 
 class _AnimatedNotifCard extends StatefulWidget {
-  final _Notif notif;
+  final int id;
+  final String title;
+  final String body;
+  final bool isRead;
+  final DateTime createdAt;
+  final _NotifMeta meta;
   final VoidCallback onMarkRead;
-  final VoidCallback onDelete;
 
   const _AnimatedNotifCard({
     super.key,
-    required this.notif,
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.isRead,
+    required this.createdAt,
+    required this.meta,
     required this.onMarkRead,
-    required this.onDelete,
   });
 
   @override
@@ -484,9 +465,13 @@ class _AnimatedNotifCardState extends State<_AnimatedNotifCard>
       child: SlideTransition(
         position: _slide,
         child: _NotifCard(
-          notif: widget.notif,
+          id: widget.id,
+          title: widget.title,
+          body: widget.body,
+          isRead: widget.isRead,
+          createdAt: widget.createdAt,
+          meta: widget.meta,
           onMarkRead: widget.onMarkRead,
-          onDelete: widget.onDelete,
         ),
       ),
     );
@@ -494,14 +479,22 @@ class _AnimatedNotifCardState extends State<_AnimatedNotifCard>
 }
 
 class _NotifCard extends StatefulWidget {
-  final _Notif notif;
+  final int id;
+  final String title;
+  final String body;
+  final bool isRead;
+  final DateTime createdAt;
+  final _NotifMeta meta;
   final VoidCallback onMarkRead;
-  final VoidCallback onDelete;
 
   const _NotifCard({
-    required this.notif,
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.isRead,
+    required this.createdAt,
+    required this.meta,
     required this.onMarkRead,
-    required this.onDelete,
   });
 
   @override
@@ -542,12 +535,11 @@ class _NotifCardState extends State<_NotifCard>
 
   @override
   Widget build(BuildContext context) {
-    final meta = _notifMeta[widget.notif.type]!;
-    final isUnread = !widget.notif.isRead;
+    final meta = widget.meta;
+    final isUnread = !widget.isRead;
 
     return Dismissible(
-      key: ValueKey('dismissible_${widget.notif.id}'),
-      // Swipe right → mark read
+      key: ValueKey('dismissible_${widget.id}'),
       background: _SwipeBg(
         alignment: Alignment.centerLeft,
         color: _primary,
@@ -555,7 +547,6 @@ class _NotifCardState extends State<_NotifCard>
         label: 'Mark read',
         isLeft: true,
       ),
-      // Swipe left → delete
       secondaryBackground: _SwipeBg(
         alignment: Alignment.centerRight,
         color: const Color(0xFFEF4444),
@@ -563,20 +554,12 @@ class _NotifCardState extends State<_NotifCard>
         label: 'Delete',
         isLeft: false,
       ),
-      onDismissed: (dir) {
-        if (dir == DismissDirection.startToEnd) {
-          widget.onMarkRead();
-        } else {
-          widget.onDelete();
-        }
-      },
       confirmDismiss: (dir) async {
         if (dir == DismissDirection.startToEnd) {
-          // Mark read but don't remove
           widget.onMarkRead();
           return false;
         }
-        return true;
+        return false;
       },
       child: GestureDetector(
         onTap: () {
@@ -624,7 +607,6 @@ class _NotifCardState extends State<_NotifCard>
                       ),
                       child: Icon(meta.icon, color: meta.color, size: 22),
                     ),
-                    // Unread dot
                     if (isUnread)
                       Positioned(
                         top: -3,
@@ -641,16 +623,13 @@ class _NotifCardState extends State<_NotifCard>
                       ),
                   ],
                 ),
-
                 const SizedBox(width: 14),
-
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          // Category pill
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
@@ -672,7 +651,7 @@ class _NotifCardState extends State<_NotifCard>
                           ),
                           const Spacer(),
                           Text(
-                            _timeLabel(widget.notif.time),
+                            _timeLabel(widget.createdAt),
                             style: TextStyle(
                               color: isUnread ? _primary : _textMuted,
                               fontSize: 11,
@@ -683,11 +662,9 @@ class _NotifCardState extends State<_NotifCard>
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 6),
-
                       Text(
-                        widget.notif.title,
+                        widget.title,
                         style: TextStyle(
                           color: _onSurface,
                           fontSize: 14,
@@ -697,11 +674,9 @@ class _NotifCardState extends State<_NotifCard>
                           height: 1.3,
                         ),
                       ),
-
                       const SizedBox(height: 4),
-
                       Text(
-                        widget.notif.body,
+                        widget.body,
                         style: const TextStyle(
                           color: _textMuted,
                           fontSize: 13,
@@ -785,7 +760,6 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Layered circle illustration
             Stack(
               alignment: Alignment.center,
               children: [
@@ -820,9 +794,7 @@ class _EmptyState extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 28),
-
             const Text(
               'All caught up',
               style: TextStyle(
@@ -832,17 +804,13 @@ class _EmptyState extends StatelessWidget {
                 letterSpacing: -0.3,
               ),
             ),
-
             const SizedBox(height: 10),
-
             const Text(
               'New updates about providers, reviews,\nand your account will appear here.',
               textAlign: TextAlign.center,
               style: TextStyle(color: _textMuted, fontSize: 14, height: 1.6),
             ),
-
             const SizedBox(height: 32),
-
             SizedBox(
               height: 50,
               child: ElevatedButton.icon(

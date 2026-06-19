@@ -8,7 +8,7 @@ This project was developed over **10 weeks** using **Flutter** for the mobile ap
 
 # Project Overview
 
-Service Finder helps users quickly find trusted professionals, request services, manage favorites, leave reviews, and communicate with providers through a complete service request workflow.
+Service Finder helps users quickly find trusted professionals, request services, manage favorites, leave reviews, receive notifications, and complete the full service workflow from booking to review.
 
 The platform supports three different roles:
 
@@ -37,8 +37,13 @@ The platform supports three different roles:
 * Browse Service Providers
 * View Provider Details
 * Search Providers
+* Filter Providers
 * Request Services
+* Select Service Date
+* Select Service Time
+* Select Estimated Duration
 * Track Service Requests
+* View Request Progress
 * Add Providers To Favorites
 * Remove Favorites
 * Submit Reviews & Ratings
@@ -55,10 +60,15 @@ The platform supports three different roles:
 * Manage Provider Profile
 * Upload Cover Image
 * Upload Gallery Images
+* Manage Provider Gallery
 * Receive Customer Requests
 * Accept Requests
 * Reject Requests
+* Start Service Jobs
+* Complete Service Jobs
 * View Customer Reviews
+* View Availability Status
+* Busy / Available Status
 
 ---
 
@@ -96,7 +106,9 @@ The platform supports three different roles:
 
 ## Notifications
 
+* Firebase Cloud Messaging (FCM)
 * User Notifications
+* Provider Notifications
 * Notification Management
 
 ---
@@ -106,6 +118,8 @@ The platform supports three different roles:
 ### Customer Side
 
 * Create Service Request
+* Select Date & Time
+* Select Estimated Duration
 * View Request History
 * Track Request Status
 
@@ -114,6 +128,35 @@ The platform supports three different roles:
 * View Incoming Requests
 * Accept Requests
 * Reject Requests
+* Start Service Request
+* Complete Service Request
+
+### Request Workflow
+
+* Pending
+* Accepted
+* In Progress
+* Completed
+* Rejected
+
+---
+
+## Availability & Booking System
+
+* Provider Availability Check
+* Busy / Available Status
+* Remaining Time Calculation
+* Prevent Overlapping Bookings
+* Time Slot Validation
+
+---
+
+## Offline Cache
+
+* Hive Local Storage
+* Services Cache
+* Providers Cache
+* Offline Fallback Support
 
 ---
 
@@ -125,7 +168,10 @@ The platform supports three different roles:
 * Dart
 * Riverpod
 * Dio
-* JWT Authentication
+* Hive
+* Firebase Messaging
+* Flutter Secure Storage
+* Flutter Map
 
 ## Backend
 
@@ -152,6 +198,7 @@ Frontend:
 * Riverpod State Management
 * Repository Pattern
 * Clean Architecture Principles
+* Local Cache Layer
 
 Backend:
 
@@ -315,9 +362,7 @@ Backend:
 
 Swagger UI:
 
-```text
 http://localhost:8080/swagger-ui/index.html
-```
 
 ---
 
@@ -355,9 +400,12 @@ During development the following modules were completed:
 * Admin Dashboard
 * Reviews System
 * Favorites System
-* Notifications
+* Notifications System
 * Request Management
 * Provider Applications
+* Availability System
+* Booking System
+* Offline Cache
 * Maps Integration
 * Modern UI/UX Design
 

@@ -1,4 +1,5 @@
 import '../../data/models/request_model.dart';
+import '../../data/models/provider_availability_model.dart';
 
 abstract class RequestState {}
 
@@ -22,6 +23,12 @@ class ProviderRequestsLoaded extends RequestState {
   final List<RequestModel> requests;
 
   ProviderRequestsLoaded(this.requests);
+}
+
+class ProviderAvailabilityLoaded extends RequestState {
+  final ProviderAvailabilityModel availability;
+
+  ProviderAvailabilityLoaded(this.availability);
 }
 
 class RequestError extends RequestState {

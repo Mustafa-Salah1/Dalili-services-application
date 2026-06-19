@@ -46,6 +46,19 @@ String _formatDate(DateTime d) {
 
 String _apiDate(DateTime d) => d.toString().split(' ')[0];
 
+String _apiTime(TimeOfDay time) {
+  final hour = time.hour.toString().padLeft(2, '0');
+  final minute = time.minute.toString().padLeft(2, '0');
+  return '$hour:$minute:00';
+}
+
+String _formatTime(TimeOfDay time) {
+  final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+  final minute = time.minute.toString().padLeft(2, '0');
+  final period = time.period == DayPeriod.am ? 'AM' : 'PM';
+  return '$hour:$minute $period';
+}
+
 class CreateRequestScreen extends ConsumerStatefulWidget {
   final ProviderModel provider;
   const CreateRequestScreen({super.key, required this.provider});
@@ -59,6 +72,8 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen>
     with TickerProviderStateMixin {
   final _notesController = TextEditingController();
   DateTime? _selectedDate;
+  TimeOfDay? _selectedTime;
+  int _selectedDuration = 60;
   String? _dateError;
   bool _notesFocused = false;
 
@@ -140,18 +155,68 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen>
     }
   }
 
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime ?? TimeOfDay.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: _C.primary,
+              onPrimary: Colors.white,
+              surface: _C.surface,
+              onSurface: _C.textDark,
+            ),
+            dialogBackgroundColor: _C.surface,
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedTime = picked;
+      });
+    }
+  }
+
   void _submit() {
     if (_selectedDate == null) {
       setState(() => _dateError = 'Please choose a service date to continue');
       return;
     }
     setState(() => _dateError = null);
+
+    if (_selectedTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.white, size: 17),
+              SizedBox(width: 8),
+              Text('Please select a time'),
+            ],
+          ),
+          backgroundColor: _C.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+      return;
+    }
+
     ref
         .read(requestProvider.notifier)
         .createRequest(
           providerId: widget.provider.id,
           requestDate: _apiDate(_selectedDate!),
           notes: _notesController.text,
+          requestTime: _apiTime(_selectedTime!),
+          estimatedDurationMinutes: _selectedDuration,
         );
   }
 
@@ -264,7 +329,6 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Date selection
                       _SectionLabel(
                         icon: Icons.calendar_month_rounded,
                         label: 'Select Date',
@@ -278,7 +342,32 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen>
 
                       const SizedBox(height: 22),
 
-                      // Notes
+                      _SectionLabel(
+                        icon: Icons.access_time_rounded,
+                        label: 'Booking Time',
+                      ),
+                      const SizedBox(height: 10),
+                      _TimeSelector(
+                        selectedTime: _selectedTime,
+                        onTap: _pickTime,
+                      ),
+
+                      const SizedBox(height: 22),
+
+                      _SectionLabel(
+                        icon: Icons.timelapse_rounded,
+                        label: 'Estimated Duration',
+                      ),
+                      const SizedBox(height: 10),
+                      _DurationSelector(
+                        value: _selectedDuration,
+                        onChanged: (v) {
+                          if (v != null) setState(() => _selectedDuration = v);
+                        },
+                      ),
+
+                      const SizedBox(height: 22),
+
                       _SectionLabel(
                         icon: Icons.notes_rounded,
                         label: 'Additional Notes',
@@ -292,7 +381,6 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen>
 
                       const SizedBox(height: 22),
 
-                      // Summary card — only when date is picked
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         transitionBuilder: (child, anim) => FadeTransition(
@@ -304,6 +392,8 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen>
                                 key: const ValueKey('summary'),
                                 provider: p,
                                 date: _selectedDate!,
+                                time: _selectedTime,
+                                duration: _selectedDuration,
                                 notes: _notesController.text,
                               )
                             : const SizedBox(key: ValueKey('empty')),
@@ -311,7 +401,6 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen>
 
                       if (_selectedDate != null) const SizedBox(height: 22),
 
-                      // Submit button
                       _SubmitButton(
                         isLoading: isLoading,
                         onPressed: isLoading ? null : _submit,
@@ -328,13 +417,154 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen>
   }
 }
 
+class _TimeSelector extends StatelessWidget {
+  final TimeOfDay? selectedTime;
+  final VoidCallback onTap;
+  const _TimeSelector({required this.selectedTime, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTime = selectedTime != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          color: hasTime ? _C.primary.withOpacity(0.04) : _C.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: hasTime ? _C.primary : _C.border,
+            width: hasTime ? 1.8 : 1.2,
+          ),
+          boxShadow: hasTime
+              ? [
+                  BoxShadow(
+                    color: _C.primary.withOpacity(0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : [],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: hasTime ? _C.primary.withOpacity(0.12) : _C.background,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.access_time_rounded,
+                size: 18,
+                color: hasTime ? _C.primary : _C.textMuted,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: Column(
+                  key: ValueKey(selectedTime),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      hasTime ? 'Booking Time' : 'Select Time',
+                      style: const TextStyle(
+                        color: _C.textMuted,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (hasTime) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatTime(selectedTime!),
+                        style: const TextStyle(
+                          color: _C.textDark,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            Icon(
+              hasTime ? Icons.edit_rounded : Icons.chevron_right_rounded,
+              size: 20,
+              color: hasTime ? _C.primary : _C.textMuted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DurationSelector extends StatelessWidget {
+  final int value;
+  final ValueChanged<int?> onChanged;
+  const _DurationSelector({required this.value, required this.onChanged});
+
+  static const _options = [30, 60, 90, 120, 180];
+  static const _labels = {
+    30: '30 Minutes',
+    60: '60 Minutes',
+    90: '90 Minutes',
+    120: '120 Minutes',
+    180: '180 Minutes',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: _C.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _C.border, width: 1.2),
+      ),
+      child: DropdownButtonFormField<int>(
+        value: value,
+        onChanged: onChanged,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(vertical: 10),
+          prefixIcon: Icon(
+            Icons.hourglass_bottom_rounded,
+            size: 18,
+            color: _C.primary,
+          ),
+        ),
+        style: const TextStyle(
+          color: _C.textDark,
+          fontSize: 14.5,
+          fontWeight: FontWeight.w600,
+        ),
+        dropdownColor: _C.surface,
+        icon: const Icon(Icons.expand_more_rounded, color: _C.textMuted),
+        items: _options
+            .map((d) => DropdownMenuItem(value: d, child: Text(_labels[d]!)))
+            .toList(),
+      ),
+    );
+  }
+}
+
 class _HeaderBanner extends StatelessWidget {
   final ProviderModel provider;
   const _HeaderBanner({required this.provider});
 
   @override
   Widget build(BuildContext context) {
-    // Try optional fields gracefully
     String? city, category;
     try {
       city = provider.city as String?;
@@ -360,7 +590,6 @@ class _HeaderBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Avatar
           Container(
             width: 62,
             height: 62,
@@ -443,7 +672,6 @@ class _HeaderBanner extends StatelessWidget {
             ),
           ),
 
-          // Booking pill
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
@@ -570,8 +798,8 @@ class _DateSelector extends StatelessWidget {
                       children: [
                         Text(
                           hasDate ? 'Service Date' : 'Choose a date',
-                          style: TextStyle(
-                            color: hasDate ? _C.textMuted : _C.textMuted,
+                          style: const TextStyle(
+                            color: _C.textMuted,
                             fontSize: 11.5,
                             fontWeight: FontWeight.w500,
                           ),
@@ -681,11 +909,15 @@ class _NotesField extends StatelessWidget {
 class _SummaryCard extends StatelessWidget {
   final ProviderModel provider;
   final DateTime date;
+  final TimeOfDay? time;
+  final int duration;
   final String notes;
   const _SummaryCard({
     super.key,
     required this.provider,
     required this.date,
+    required this.time,
+    required this.duration,
     required this.notes,
   });
 
@@ -727,6 +959,20 @@ class _SummaryCard extends StatelessWidget {
             icon: Icons.calendar_today_rounded,
             label: 'Date',
             value: _formatDate(date),
+          ),
+          if (time != null) ...[
+            const SizedBox(height: 8),
+            _SummaryRow(
+              icon: Icons.access_time_rounded,
+              label: 'Time',
+              value: _formatTime(time!),
+            ),
+          ],
+          const SizedBox(height: 8),
+          _SummaryRow(
+            icon: Icons.timelapse_rounded,
+            label: 'Duration',
+            value: '$duration Minutes',
           ),
           if (notes.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -952,7 +1198,6 @@ class _SuccessDialogState extends State<_SuccessDialog>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Check circle
                 Container(
                   width: 72,
                   height: 72,
@@ -1026,7 +1271,6 @@ class _SuccessDialogState extends State<_SuccessDialog>
 
                 const SizedBox(height: 24),
 
-                // Done button
                 GestureDetector(
                   onTap: widget.onDone,
                   child: Container(

@@ -6,6 +6,9 @@ import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/repositories/auth_repository.dart';
 import 'package:service_finder/core/storage/secure_storage_service.dart';
 import '../../data/models/auth_response_model.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:dio/dio.dart';
+import '../../../../core/network/dio_client.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>(
   (ref) => AuthRepositoryImpl(AuthRemoteDataSource()),
@@ -32,9 +35,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       await SecureStorageService.saveRefreshToken(response.refreshToken);
 
+      await updateFcmToken();
+
       state = AuthAuthenticated();
     } catch (e) {
       state = AuthError(e.toString());
+    }
+  }
+
+  Future<void> updateFcmToken() async {
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+
+      if (token == null) return;
+
+      await DioClient.dio.put(
+        '/api/users/fcm-token',
+        data: {'fcmToken': token},
+      );
+
+      print('FCM Token Saved Successfully');
+    } catch (e) {
+      print('FCM Token Error: $e');
     }
   }
 

@@ -1,3 +1,5 @@
+import 'package:service_finder/core/cache/cache_service.dart';
+
 import '../../domain/repositories/provider_repository.dart';
 import '../datasources/provider_remote_data_source.dart';
 import '../models/provider_model.dart';
@@ -10,11 +12,33 @@ class ProviderRepositoryImpl implements ProviderRepository {
 
   @override
   Future<List<ProviderModel>> getProvidersByService(int serviceId) async {
-    final response = await remoteDataSource.getProvidersByService(serviceId);
+    try {
+      final response = await remoteDataSource.getProvidersByService(serviceId);
 
-    return (response.data as List)
-        .map((provider) => ProviderModel.fromJson(provider))
-        .toList();
+      await CacheService.providersBox.put(
+        'providers_service_$serviceId',
+        response.data,
+      );
+
+      return (response.data as List)
+          .map((provider) => ProviderModel.fromJson(provider))
+          .toList();
+    } catch (e) {
+      final cachedData = CacheService.providersBox.get(
+        'providers_service_$serviceId',
+      );
+
+      if (cachedData != null) {
+        return (cachedData as List)
+            .map(
+              (provider) =>
+                  ProviderModel.fromJson(Map<String, dynamic>.from(provider)),
+            )
+            .toList();
+      }
+
+      rethrow;
+    }
   }
 
   @override
@@ -26,11 +50,31 @@ class ProviderRepositoryImpl implements ProviderRepository {
 
   @override
   Future<List<ProviderModel>> getAllProviders() async {
-    final response = await remoteDataSource.getAllProviders();
+    try {
+      final response = await remoteDataSource.getAllProviders();
 
-    return (response.data['content'] as List)
-        .map((provider) => ProviderModel.fromJson(provider))
-        .toList();
+      await CacheService.providersBox.put(
+        'all_providers',
+        response.data['content'],
+      );
+
+      return (response.data['content'] as List)
+          .map((provider) => ProviderModel.fromJson(provider))
+          .toList();
+    } catch (e) {
+      final cachedData = CacheService.providersBox.get('all_providers');
+
+      if (cachedData != null) {
+        return (cachedData as List)
+            .map(
+              (provider) =>
+                  ProviderModel.fromJson(Map<String, dynamic>.from(provider)),
+            )
+            .toList();
+      }
+
+      rethrow;
+    }
   }
 
   @override
@@ -93,8 +137,23 @@ class ProviderRepositoryImpl implements ProviderRepository {
 
   @override
   Future<ProviderModel> getProviderById(int providerId) async {
-    final response = await remoteDataSource.getProviderById(providerId);
+    try {
+      final response = await remoteDataSource.getProviderById(providerId);
 
-    return ProviderModel.fromJson(response.data);
+      await CacheService.providersBox.put(
+        'provider_$providerId',
+        response.data,
+      );
+
+      return ProviderModel.fromJson(response.data);
+    } catch (e) {
+      final cachedData = CacheService.providersBox.get('provider_$providerId');
+
+      if (cachedData != null) {
+        return ProviderModel.fromJson(Map<String, dynamic>.from(cachedData));
+      }
+
+      rethrow;
+    }
   }
 }
