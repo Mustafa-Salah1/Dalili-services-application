@@ -43,3 +43,37 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+
+# Firebase
+
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+firebase.json
+
+# Build files
+
+android/build/
+ios/build/
+build/
+
+# Flutter generated
+
+.flutter-plugins
+.flutter-plugins-dependencies
+.dart_tool/
+
+# VS Code
+
+.vscode/
+
+# Environment files
+
+.env
+.env.*
+
+# Local configuration
+
+*.keystore
+key.properties
+local.properties
