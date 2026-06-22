@@ -160,6 +160,91 @@ The platform supports three different roles:
 
 ---
 
+### Cache & Performance Optimization
+
+* Memory Cache Layer
+* Hive Offline Cache
+* Cache Expiration (30 Minutes)
+* Automatic Cache Refresh After Expiration
+* Cached Network Images
+* Image Cache Optimization
+* Reduced API Calls
+* Reduced Network Usage
+* Faster Screen Loading
+* Optimized For Low-End Devices
+
+---
+
+## Cache System
+
+The application implements a multi-layer caching strategy for maximum performance and offline support.
+
+### Memory Cache
+
+Used for:
+
+* Services List
+* Providers By Service
+* Provider Gallery Data
+
+Benefits:
+
+* Instant Data Access
+* Reduced API Requests
+* Better User Experience
+
+### Hive Cache
+
+Used for:
+
+* Offline Services Data
+* Offline Providers Data
+* Offline Gallery Data
+
+Benefits:
+
+* Offline Support
+* Persistent Local Storage
+* Faster Application Startup
+
+### Cache Expiration
+
+* 30 Minute Cache Lifetime
+* Automatic Data Refresh
+* Prevents Stale Data
+* Keeps Content Up To Date
+
+### Image Cache
+
+Implemented using:
+
+* CachedNetworkImage
+
+Benefits:
+
+* Cached Provider Images
+* Cached Gallery Images
+* Reduced Bandwidth Usage
+* Faster Image Loading
+* Lower Memory Consumption
+
+---
+
+## Performance Optimizations
+
+* Memory Cache
+* Hive Cache
+* Cached Network Images
+* Reduced API Calls
+* Reduced Database Queries
+* Optimized Flutter Rebuilds
+* Optimized Network Requests
+* Low-End Device Friendly
+* Offline First Approach
+
+
+--- 
+
 # Technologies Used
 
 ## Frontend
@@ -169,9 +254,11 @@ The platform supports three different roles:
 * Riverpod
 * Dio
 * Hive
+* Cached Network Image
 * Firebase Messaging
 * Flutter Secure Storage
 * Flutter Map
+
 
 ## Backend
 
@@ -408,6 +495,10 @@ During development the following modules were completed:
 * Offline Cache
 * Maps Integration
 * Modern UI/UX Design
+* Memory Cache System
+* Cache Expiration System
+* Image Cache System
+* Performance Optimization
 
 ---
 

@@ -10,6 +10,7 @@ import '../providers/provider_provider.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../review/data/datasources/review_remote_data_source.dart';
 import '../../../favorite/presentation/providers/favorite_provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ProviderDetailsScreen extends ConsumerStatefulWidget {
   final ProviderModel provider;
@@ -495,9 +496,17 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen> {
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(18),
-                                  child: Image.network(
-                                    'http://10.0.2.2:8080${images[index].imageUrl}',
+                                  child: CachedNetworkImage(
+                                    imageUrl:
+                                        'http://10.0.2.2:8080${images[index].imageUrl}',
                                     fit: BoxFit.cover,
+
+                                    placeholder: (_, __) => const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+
+                                    errorWidget: (_, __, ___) =>
+                                        const Icon(Icons.broken_image),
                                   ),
                                 ),
                               );

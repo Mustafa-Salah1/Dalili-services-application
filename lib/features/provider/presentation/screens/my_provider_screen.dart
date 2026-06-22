@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../providers/provider_provider.dart';
 import '../providers/provider_state.dart';
 import 'edit_provider_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 const _primary = Color(0xFF0F766E);
 const _secondary = Color(0xFF14B8A6);
@@ -251,10 +252,13 @@ class _ProviderSliverHeader extends StatelessWidget {
           children: [
             // Cover image
             if (provider.coverImage != null)
-              Image.network(
-                'http://10.0.2.2:8080${provider.coverImage}',
+              CachedNetworkImage(
+                imageUrl: 'http://10.0.2.2:8080${provider.coverImage}',
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _DefaultCoverGradient(),
+
+                placeholder: (_, __) => _DefaultCoverGradient(),
+
+                errorWidget: (_, __, ___) => _DefaultCoverGradient(),
               )
             else
               _DefaultCoverGradient(),
@@ -884,28 +888,20 @@ class _GalleryTileState extends State<_GalleryTile>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.network(
-                widget.imageUrl,
+              CachedNetworkImage(
+                imageUrl: widget.imageUrl,
                 fit: BoxFit.cover,
-                loadingBuilder: (_, child, progress) {
-                  if (progress == null) return child;
-                  return Container(
-                    color: _shimmer1,
-                    child: const Center(
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: _primary,
-                      ),
-                    ),
-                  );
-                },
-                errorBuilder: (_, __, ___) => Container(
+
+                placeholder: (_, __) => Container(
                   color: _shimmer1,
-                  child: const Icon(
-                    Icons.broken_image,
-                    color: _textMuted,
-                    size: 32,
+                  child: const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
+                ),
+
+                errorWidget: (_, __, ___) => Container(
+                  color: _shimmer1,
+                  child: const Icon(Icons.broken_image),
                 ),
               ),
               // Subtle vignette
